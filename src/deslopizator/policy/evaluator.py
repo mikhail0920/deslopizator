@@ -51,4 +51,14 @@ def evaluate_diff(diff: AuditDiff, config: PolicyConfig) -> PolicyResult:
             str(diff.new_architecture_violations),
             "new architecture violations exceed budget",
         ))
+    if diff.new_certain_smells > config.max_new_certain_smells:
+        violations.append(_violation(
+            "max-new-certain-smells", str(config.max_new_certain_smells), str(diff.new_certain_smells),
+            "new certain slop findings exceed budget",
+        ))
+    if diff.new_high_smells > config.max_new_high_smells:
+        violations.append(_violation(
+            "max-new-high-smells", str(config.max_new_high_smells), str(diff.new_high_smells),
+            "new high-confidence slop findings exceed budget",
+        ))
     return PolicyResult(not violations, tuple(violations))

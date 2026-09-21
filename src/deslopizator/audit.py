@@ -11,6 +11,7 @@ from deslopizator.history.churn import analyze_churn
 from deslopizator.history.coupling import analyze_coupling
 from deslopizator.history.hotspots import build_hotspots, build_structural_debt
 from deslopizator.scoring.scorer import score
+from deslopizator.smells.analysis import analyze_smells
 
 
 def _status_for_production(errors: tuple[str, ...], production_count: int) -> DimensionCompleteness:
@@ -36,6 +37,7 @@ def analyze_project(path: Path | str) -> AuditResult:
         imports.edges,
         load_architecture_config(inventory.root),
     )
+    smells = analyze_smells(inventory)
 
     import_reasons = tuple(
         f"unresolved local import: {item.source} -> {item.raw_import}"
@@ -71,4 +73,5 @@ def analyze_project(path: Path | str) -> AuditResult:
         coupling_available,
         coupling_reasons,
         architecture,
+        smells,
     )

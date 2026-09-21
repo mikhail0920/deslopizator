@@ -1,5 +1,6 @@
 import argparse
 import io
+import json
 import subprocess
 import sys
 import tarfile
@@ -10,6 +11,8 @@ from deslopizator.audit import analyze_project
 from deslopizator.policy import AuditDiff, evaluate, evaluate_diff, load_policy_config
 from deslopizator.scoring import ScoringParameters
 from deslopizator.snapshots import read_snapshot, write_snapshot
+from deslopizator.snapshots import snapshot_document
+from deslopizator.explain.catalog import rule_for
 
 
 def _symbol(value: str, fallback: str) -> str:
@@ -20,7 +23,67 @@ def _symbol(value: str, fallback: str) -> str:
     return value
 
 
-def audit(path: Path, json_path: Path | None = None) -> int:
+def _sarif(result) -> dict:
+    rules = {}
+    results = []
+    for finding in (result.smells.findings if result.smells else ()):
+        code = {"pass-through": "DS101", "delegating-class": "DS102", "delegation-chain": "DS103", "single-implementation-abstraction": "DS104", "swallowed-exception": "DS105"}.get(finding.rule, finding.rule)
+        rules.setdefault(code, {"id": code, "name": finding.rule})
+        results.append({
+            "ruleId": code,
+            "level": "error" if finding.confidence == "certain" else "warning",
+            "message": {"text": f"{finding.rule} ({finding.confidence} confidence)"},
+            "locations": [{"physicalLocation": {"artifactLocation": {"uri": finding.path}, "region": {"startLine": finding.line, "endLine": finding.end_line}}}],
+        })
+    return {"version": "2.1.0", "$schema": "https://json.schemastore.org/sarif-2.1.0.json", "runs": [{"tool": {"driver": {"name": "deslopizator", "rules": list(rules.values())}}, "results": results}]}
+
+
+def _print_finding(finding) -> None:
+    code = {"pass-through": "DS101", "delegating-class": "DS102", "delegation-chain": "DS103", "single-implementation-abstraction": "DS104", "swallowed-exception": "DS105"}.get(finding.rule, finding.rule)
+    title = {"pass-through": "pass-through-function", "delegating-class": "delegating-class", "delegation-chain": "delegation-chain", "single-implementation-abstraction": "single-implementation-abstraction", "swallowed-exception": "swallowed-exception"}.get(finding.rule, finding.rule)
+    print(f"\n{code} {title}\n")
+    print(f"{finding.path}:{finding.line}-{finding.end_line}\n")
+    if finding.rule == "pass-through":
+        print(f"{finding.facts.get('function', 'function')}() only forwards its arguments to {finding.facts.get('target', 'another call')}.")
+    elif finding.rule == "delegating-class":
+        print(f"{finding.facts.get('class', 'Class')} delegates most public methods to {finding.facts.get('target', 'one object')}.")
+    elif finding.rule == "delegation-chain":
+        print("Delegation chain: " + " -> ".join(finding.facts.get("chain", ())))
+    elif finding.rule == "single-implementation-abstraction":
+        implementation = finding.facts.get("implementations", ("unknown",))[0]
+        print(f"{finding.facts.get('abstraction', 'Abstraction')} has 1 known implementation: {implementation}")
+    else:
+        print(f"Broad exception handling uses {finding.facts.get('fallback', 'a constant fallback')}.")
+    print(f"\nConfidence: {finding.confidence}")
+    explanation = rule_for(finding.rule)
+    if explanation is not None:
+        print(f"\nWhy:\n  {explanation.why}")
+        print("\nAsk:")
+        for question in explanation.questions:
+            print(f"  {question}")
+    else:
+        print("\nWhy:\n  This code matches an observable slop pattern.")
+
+
+def _print_smells(result, details: bool) -> None:
+    findings = result.smells.findings if result.smells else ()
+    labels = (
+        ("pass-through functions", "pass-through"),
+        ("delegation chains", "delegation-chain"),
+        ("single-use abstractions", "single-implementation-abstraction"),
+        ("swallowed exceptions", "swallowed-exception"),
+    )
+    print("\nSlop findings:")
+    for label, rule in labels:
+        print(f"  {label:<28} {sum(item.rule == rule for item in findings)}")
+    if result.smells and result.smells.suppressed_findings:
+        print(f"  suppressed findings{' ':<18} {result.smells.suppressed_findings}")
+    if details:
+        for finding in findings:
+            _print_finding(finding)
+
+
+def audit(path: Path, json_path: Path | None = None, details: bool = False, output_format: str = "text") -> int:
     try:
         result = analyze_project(path)
         if json_path is not None:
@@ -28,6 +91,12 @@ def audit(path: Path, json_path: Path | None = None) -> int:
     except Exception as exc:
         print(f"Analysis failed: {exc}")
         return 2
+    if output_format == "json":
+        print(json.dumps(snapshot_document(result), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+    if output_format == "sarif":
+        print(json.dumps(_sarif(result), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
     inventory = result.inventory
     print("Analysis\n")
     print(f"  Production files: {len(inventory.production_files)}")
@@ -45,8 +114,10 @@ def audit(path: Path, json_path: Path | None = None) -> int:
     score = result.score
     total = "N/A" if score.total is None else f"{score.total:.1f}"
     partial = " PARTIAL" if score.partial else ""
+    print(f"\nStructural score: {total}")
     print(f"\nSlop Index: {total} / 100{partial}")
     print(f"Scoring: {score.version}")
+    _print_smells(result, details)
     parameters = ScoringParameters()
     for name, dimension, weight in (
         ("Complexity", score.complexity, parameters.complexity_weight),
@@ -204,7 +275,14 @@ def diff(path: Path, reference: str) -> int:
         current = analyze_project(path)
         temporary, baseline = _audit_ref(path, reference)
         try:
+            difference = AuditDiff(baseline, current)
             print(f"Slop Index: {baseline.score.total if baseline.score.total is not None else 'N/A'} -> {current.score.total if current.score.total is not None else 'N/A'}")
+            print("\nNew slop")
+            for finding in difference.new_slop:
+                print(f"  {finding.rule}: {finding.path}:{finding.line}")
+            print("\nResolved slop")
+            for finding in difference.resolved_slop:
+                print(f"  {finding.rule}: {finding.path}:{finding.line}")
         finally:
             temporary.cleanup()
     except Exception as exc:
@@ -225,6 +303,8 @@ def compare(before: Path, after: Path) -> int:
         print(f"New cycle groups: {difference.new_cycle_groups}")
         print(f"New architecture violations: {difference.new_architecture_violations}")
         print(f"Resolved architecture violations: {difference.resolved_architecture_violations}")
+        print(f"New slop: {len(difference.new_slop)}")
+        print(f"Resolved slop: {len(difference.resolved_slop)}")
         if baseline.score.partial or current.score.partial:
             print("PARTIAL: comparison includes incomplete analysis")
         return 0
@@ -239,6 +319,8 @@ def main():
     audit_parser = subparsers.add_parser("audit", help="Start audit directory")
     audit_parser.add_argument("path", type=Path, help="Path to directory to audit")
     audit_parser.add_argument("--json", type=Path, dest="json_path", help="Write a portable JSON snapshot")
+    audit_parser.add_argument("--details", action="store_true", help="Show smell findings")
+    audit_parser.add_argument("--format", choices=("text", "json", "sarif"), default="text")
     compare_parser = subparsers.add_parser("compare", help="Compare two JSON snapshots")
     compare_parser.add_argument("before", type=Path)
     compare_parser.add_argument("after", type=Path)
@@ -248,15 +330,25 @@ def main():
     check_parser = subparsers.add_parser("check", help="Evaluate CI policy")
     check_parser.add_argument("path", type=Path, help="Path to directory to audit")
     check_parser.add_argument("--against", help="Git baseline reference")
+    explain_parser = subparsers.add_parser("explain", help="Explain a smell rule")
+    explain_parser.add_argument("rule")
     args = parser.parse_args()
     if args.cmd == "audit":
-        return audit(args.path, args.json_path)
+        return audit(args.path, args.json_path, args.details, args.format)
     if args.cmd == "compare":
         return compare(args.before, args.after)
     if args.cmd == "diff":
         return diff(args.path, args.reference)
     if args.cmd == "check":
         return check(args.path, args.against)
+    if args.cmd == "explain":
+        from deslopizator.explain.renderer import render_explanation
+        try:
+            print(render_explanation(args.rule))
+        except KeyError:
+            print(f"Unknown rule: {args.rule}")
+            return 2
+        return 0
     return 2
 
 

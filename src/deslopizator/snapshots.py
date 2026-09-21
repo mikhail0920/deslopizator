@@ -12,11 +12,18 @@ from deslopizator.models import ComplexityMetrics, FileComplexityMetrics, Functi
 from deslopizator.scoring.models import DimensionScore, SlopScore
 from deslopizator.history.models import ChangeCoupling, FileChurn, FileStructuralDebt, Hotspot
 from deslopizator.architecture.models import ArchitectureMetrics, ArchitectureViolation
+from deslopizator.smells.models import Finding, SmellMetrics
 
 SCHEMA_VERSION = 1
 
 
 def write_snapshot(result: AuditResult, path: Path) -> None:
+    document = snapshot_document(result)
+    path.write_text(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+
+
+def snapshot_document(result: AuditResult) -> dict:
+    """Return the same portable structure used by JSON snapshots."""
     root = result.inventory.root
 
     def portable(value):
@@ -32,8 +39,10 @@ def write_snapshot(result: AuditResult, path: Path) -> None:
             return [portable(item) for item in value]
         return value
 
-    document = {"schema_version": SCHEMA_VERSION, "audit": portable(asdict(result))}
-    path.write_text(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+    audit = portable(asdict(result))
+    if result.smells is not None:
+        audit["suppressed_findings"] = result.smells.suppressed_findings
+    return {"schema_version": SCHEMA_VERSION, "audit": audit}
 
 
 def read_snapshot(path: Path) -> AuditResult:
@@ -70,6 +79,19 @@ def read_snapshot(path: Path) -> AuditResult:
         architecture_data.get("violation_count", 0),
         tuple(ArchitectureViolation(**item) for item in architecture_data.get("violations", ())),
     )
+    smells_data = data.get("smells", {}) or {}
+    def restore_facts(value):
+        if isinstance(value, list):
+            return tuple(restore_facts(item) for item in value)
+        if isinstance(value, dict):
+            return {key: restore_facts(item) for key, item in value.items()}
+        return value
+
+    smells = SmellMetrics(
+        tuple(Finding(item["rule"], item["path"], item["line"], item["end_line"], item["confidence"], restore_facts(item["facts"]), item["fingerprint"]) for item in smells_data.get("findings", ())),
+        int(smells_data.get("suppressed_findings", 0)),
+        tuple(smells_data.get("errors", ())),
+    )
     return AuditResult(
         inventory,
         ComplexityMetrics(**complexity),
@@ -87,4 +109,5 @@ def read_snapshot(path: Path) -> AuditResult:
         data.get("coupling_available", False),
         tuple(data.get("coupling_reasons", ())),
         architecture,
+        smells,
     )

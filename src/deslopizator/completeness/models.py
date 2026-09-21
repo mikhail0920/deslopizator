@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from deslopizator.scoring.models import SlopScore
     from deslopizator.history.models import ChangeCoupling, FileChurn, FileStructuralDebt, Hotspot
     from deslopizator.architecture.models import ArchitectureMetrics
+    from deslopizator.smells.models import SmellMetrics
 
 
 class AnalysisStatus(Enum):
@@ -57,3 +58,4 @@ class AuditResult:
         return self.coupling
 
     architecture: "ArchitectureMetrics | None" = None
+    smells: "SmellMetrics | None" = None

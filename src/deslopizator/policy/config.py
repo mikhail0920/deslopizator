@@ -16,6 +16,8 @@ class PolicyConfig:
     allow_partial: bool = False
     max_architecture_violations: int = 0
     max_new_architecture_violations: int = 0
+    max_new_certain_smells: int = 0
+    max_new_high_smells: int = 0
 
 def _number(document: dict, key: str, default, cast):
     try:
@@ -41,10 +43,12 @@ def load_policy_config(root: Path | str) -> PolicyConfig:
     duplication = policy.get("duplication", {})
     cycles = policy.get("cycles", {})
     architecture = policy.get("architecture", {})
+    smells = policy.get("smells", {})
     complexity = complexity if isinstance(complexity, dict) else {}
     duplication = duplication if isinstance(duplication, dict) else {}
     cycles = cycles if isinstance(cycles, dict) else {}
     architecture = architecture if isinstance(architecture, dict) else {}
+    smells = smells if isinstance(smells, dict) else {}
     raw_max = policy.get("max-score", 35.0)
     max_score = None if raw_max is None else _number({"value": raw_max}, "value", 35.0, float)
     return PolicyConfig(
@@ -57,4 +61,6 @@ def load_policy_config(root: Path | str) -> PolicyConfig:
         allow_partial=bool(policy.get("allow-partial", False)),
         max_architecture_violations=_number(architecture, "max-violations", 0, int),
         max_new_architecture_violations=_number(architecture, "max-new-violations", 0, int),
+        max_new_certain_smells=_number(smells, "max-new-certain", 0, int),
+        max_new_high_smells=_number(smells, "max-new-high", 0, int),
     )

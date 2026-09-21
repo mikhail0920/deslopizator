@@ -38,6 +38,13 @@ def _architecture_violations(result):
     return Counter(violation.fingerprint for violation in architecture.violations)
 
 
+def _smell_findings(result):
+    smells = getattr(result, "smells", None)
+    if smells is None:
+        return Counter()
+    return Counter(finding.fingerprint for finding in smells.findings)
+
+
 @dataclass(frozen=True)
 class AuditDiff:
     baseline: "AuditResult"
@@ -74,3 +81,21 @@ class AuditDiff:
     @property
     def resolved_architecture_violations(self) -> int:
         return sum((_architecture_violations(self.baseline) - _architecture_violations(self.current)).values())
+
+    @property
+    def new_slop(self) -> tuple:
+        before = _smell_findings(self.baseline)
+        return tuple(finding for finding in getattr(self.current, "smells", None).findings if finding.fingerprint not in before) if getattr(self.current, "smells", None) else ()
+
+    @property
+    def resolved_slop(self) -> tuple:
+        after = _smell_findings(self.current)
+        return tuple(finding for finding in getattr(self.baseline, "smells", None).findings if finding.fingerprint not in after) if getattr(self.baseline, "smells", None) else ()
+
+    @property
+    def new_certain_smells(self) -> int:
+        return sum(finding.confidence == "certain" for finding in self.new_slop)
+
+    @property
+    def new_high_smells(self) -> int:
+        return sum(finding.confidence == "high" for finding in self.new_slop)
