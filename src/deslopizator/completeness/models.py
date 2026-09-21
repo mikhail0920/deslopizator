@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from deslopizator.duplication.models import DuplicationMetrics
     from deslopizator.imports.models import ImportMetrics
     from deslopizator.scoring.models import SlopScore
-    from deslopizator.history.models import FileChurn, FileStructuralDebt, Hotspot
+    from deslopizator.history.models import ChangeCoupling, FileChurn, FileStructuralDebt, Hotspot
 
 
 class AnalysisStatus(Enum):
@@ -47,3 +47,10 @@ class AuditResult:
     hotspots: tuple["Hotspot", ...] = ()
     git_available: bool = False
     history_reasons: tuple[str, ...] = ()
+    coupling: tuple["ChangeCoupling", ...] = ()
+    coupling_available: bool = False
+    coupling_reasons: tuple[str, ...] = ()
+
+    @property
+    def change_coupling(self) -> tuple["ChangeCoupling", ...]:
+        return self.coupling

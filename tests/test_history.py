@@ -79,6 +79,8 @@ def test_git_unavailability_does_not_break_audit(tmp_path):
     assert result.git_available is False
     assert result.churn[0].commits_180d == 0
     assert result.hotspots[0].priority == 0
+    assert result.coupling_available is False
+    assert result.coupling == ()
 
 
 def test_hotspots_have_deterministic_ordering():

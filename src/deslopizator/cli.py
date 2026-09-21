@@ -104,6 +104,24 @@ def audit(path: Path, json_path: Path | None = None) -> int:
         print(f"     debt: {hotspot.structural_debt:.2f}")
         print(f"     commits/180d: {hotspot.churn}")
         print(f"     priority: {hotspot.priority:.2f}")
+
+    print("\nChange coupling")
+    if not result.coupling_available:
+        print("  Change coupling unavailable")
+    for coupling in result.coupling:
+        file_a = Path(coupling.file_a).relative_to(inventory.root).as_posix()
+        file_b = Path(coupling.file_b).relative_to(inventory.root).as_posix()
+        print(f"\n  {file_a} ↔ {file_b}")
+        print(f"    changed together: {coupling.cochanges} times")
+        print(f"    A → B: {coupling.probability_b_given_a:.0%}")
+        print(f"    B → A: {coupling.probability_a_given_b:.0%}")
+        print(f"    static dependency: {'yes' if coupling.has_static_dependency else 'no'}")
+        if not coupling.has_static_dependency:
+            print("    Strong temporal coupling detected.")
+            print(
+                f"    These files changed together in {coupling.strength:.0%}+ of their changes."
+            )
+            print("    No direct static dependency was found.")
     return 0
 
 

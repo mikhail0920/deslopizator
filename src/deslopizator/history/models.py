@@ -29,3 +29,16 @@ class Hotspot:
     structural_debt: float
     churn: int
     priority: float
+
+
+@dataclass(frozen=True)
+class ChangeCoupling:
+    file_a: str
+    file_b: str
+    changes_a: int
+    changes_b: int
+    cochanges: int
+    probability_b_given_a: float
+    probability_a_given_b: float
+    strength: float
+    has_static_dependency: bool

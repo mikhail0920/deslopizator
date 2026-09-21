@@ -6,6 +6,7 @@ from deslopizator.duplication.detector import analyze_duplication_facts
 from deslopizator.imports.graph import analyze_imports
 from deslopizator.inventory.classifier import discover_project
 from deslopizator.history.churn import analyze_churn
+from deslopizator.history.coupling import analyze_coupling
 from deslopizator.history.hotspots import build_hotspots, build_structural_debt
 from deslopizator.scoring.scorer import score
 
@@ -27,6 +28,7 @@ def analyze_project(path: Path | str) -> AuditResult:
     churn, git_available, history_reasons = analyze_churn(inventory)
     structural_debt = build_structural_debt(inventory, complexity, clone_groups, imports.metrics)
     hotspots = build_hotspots(structural_debt, churn)
+    coupling, coupling_available, coupling_reasons = analyze_coupling(inventory, imports)
 
     import_reasons = tuple(
         f"unresolved local import: {item.source} -> {item.raw_import}"
@@ -58,4 +60,7 @@ def analyze_project(path: Path | str) -> AuditResult:
         hotspots,
         git_available,
         history_reasons,
+        coupling,
+        coupling_available,
+        coupling_reasons,
     )
