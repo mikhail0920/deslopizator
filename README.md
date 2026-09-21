@@ -85,7 +85,7 @@ change     -0.1
 
 ## Установка
 ```commandline
-pip install git+https://github.com/<you>/deslop.git
+pip install git+https://github.com/mikhail0920/deslopizator.git
 ```
 Нужен Python 3.10+ — в том числе потому, что парсеру приходится уметь читать match/case.
 
