@@ -1,7 +1,12 @@
 import argparse
+import io
+import subprocess
+import tarfile
+import tempfile
 from pathlib import Path
 
 from deslopizator.audit import analyze_project
+from deslopizator.policy import AuditDiff, evaluate, evaluate_diff, load_policy_config
 from deslopizator.scoring import ScoringParameters
 
 
@@ -70,6 +75,68 @@ def audit(path: Path) -> int:
     if result.imports.unresolved_import_count:
         print("\nAnalysis warnings:")
         print(f"  {result.imports.unresolved_import_count} unresolved imports")
+    return 0
+
+
+def _audit_ref(path: Path, reference: str):
+    root = path.resolve()
+    command = ["git", "-C", str(root), "archive", reference]
+    try:
+        archive = subprocess.run(command, check=True, capture_output=True).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError(f"cannot read baseline {reference}: {exc}") from exc
+    temporary = tempfile.TemporaryDirectory()
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as stream:
+        stream.extractall(temporary.name)
+    return temporary, analyze_project(Path(temporary.name))
+
+
+def _print_policy(result, title: str = "Policy") -> None:
+    print(f"{title}: {'PASSED' if result.passed else 'FAILED'}")
+    if result.violations:
+        print(f"\n{len(result.violations)} violations")
+        for violation in result.violations:
+            print(f"\n{violation.rule}")
+            print(f"  allowed: {violation.expected}")
+            print(f"  actual: {violation.actual}")
+            print(f"  {violation.message}")
+
+
+def check(path: Path, against: str | None) -> int:
+    try:
+        current = analyze_project(path)
+        config = load_policy_config(path)
+        if against is None:
+            policy = evaluate(current, config)
+        else:
+            temporary, baseline = _audit_ref(path, against)
+            try:
+                policy = evaluate_diff(AuditDiff(baseline, current), config)
+            finally:
+                temporary.cleanup()
+    except Exception as exc:
+        print(f"Analysis failed: {exc}")
+        return 2
+    _print_policy(policy)
+    if against is not None:
+        before = "N/A" if baseline.score.total is None else f"{baseline.score.total:.1f}"
+        after = "N/A" if current.score.total is None else f"{current.score.total:.1f}"
+        print(f"Slop Index: {before} → {after}")
+    return 0 if policy.passed else 1
+
+
+def diff(path: Path, reference: str) -> int:
+    try:
+        current = analyze_project(path)
+        temporary, baseline = _audit_ref(path, reference)
+        try:
+            print(f"Slop Index: {baseline.score.total if baseline.score.total is not None else 'N/A'} → {current.score.total if current.score.total is not None else 'N/A'}")
+        finally:
+            temporary.cleanup()
+    except Exception as exc:
+        print(f"Analysis failed: {exc}")
+        return 2
+    return 0
 
 
 def main():
@@ -77,9 +144,20 @@ def main():
     subparsers = parser.add_subparsers(dest="cmd", required=True)
     audit_parser = subparsers.add_parser("audit", help="Start audit directory")
     audit_parser.add_argument("path", type=Path, help="Path to directory to audit")
+    diff_parser = subparsers.add_parser("diff", help="Compare with a Git baseline")
+    diff_parser.add_argument("reference", help="Git reference")
+    diff_parser.add_argument("path", type=Path, nargs="?", default=Path("."))
+    check_parser = subparsers.add_parser("check", help="Evaluate CI policy")
+    check_parser.add_argument("path", type=Path, help="Path to directory to audit")
+    check_parser.add_argument("--against", help="Git baseline reference")
     args = parser.parse_args()
     if args.cmd == "audit":
-        audit(args.path)
+        return audit(args.path)
+    if args.cmd == "diff":
+        return diff(args.path, args.reference)
+    if args.cmd == "check":
+        return check(args.path, args.against)
+    return 2
 
 
 if __name__ == "__main__":
