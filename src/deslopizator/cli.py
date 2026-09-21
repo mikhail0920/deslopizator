@@ -90,6 +90,20 @@ def audit(path: Path, json_path: Path | None = None) -> int:
     if result.imports.unresolved_import_count:
         print("\nAnalysis warnings:")
         print(f"  {result.imports.unresolved_import_count} unresolved imports")
+
+    print("\nHotspots")
+    if not result.git_available:
+        print("  Git history unavailable; priorities are 0")
+    shown = 0
+    for hotspot in result.hotspots:
+        if hotspot.priority <= 0:
+            continue
+        shown += 1
+        relative = Path(hotspot.path).relative_to(inventory.root)
+        print(f"\n  {shown}. {relative}")
+        print(f"     debt: {hotspot.structural_debt:.2f}")
+        print(f"     commits/180d: {hotspot.churn}")
+        print(f"     priority: {hotspot.priority:.2f}")
     return 0
 
 

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from deslopizator.duplication.models import DuplicationMetrics
     from deslopizator.imports.models import ImportMetrics
     from deslopizator.scoring.models import SlopScore
+    from deslopizator.history.models import FileChurn, FileStructuralDebt, Hotspot
 
 
 class AnalysisStatus(Enum):
@@ -41,3 +42,8 @@ class AuditResult:
     completeness: AuditCompleteness
     score: "SlopScore"
     clone_groups: tuple[CloneGroup, ...] = ()
+    churn: tuple["FileChurn", ...] = ()
+    structural_debt: tuple["FileStructuralDebt", ...] = ()
+    hotspots: tuple["Hotspot", ...] = ()
+    git_available: bool = False
+    history_reasons: tuple[str, ...] = ()

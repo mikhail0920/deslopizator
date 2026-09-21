@@ -37,6 +37,10 @@ class FileComplexityMetrics:
     eroded_function_count: int
 
     @property
+    def eroded_mass(self) -> float:
+        return self.eroded_function_mass
+
+    @property
     def eroded_mass_share(self) -> float:
         if self.total_function_mass == 0:
             return 0.0

@@ -10,6 +10,7 @@ from deslopizator.imports.models import ImportCycle, ImportMetrics
 from deslopizator.inventory.models import FileKind, ProjectInventory, SourceFile
 from deslopizator.models import ComplexityMetrics, FileComplexityMetrics, FunctionMetrics
 from deslopizator.scoring.models import DimensionScore, SlopScore
+from deslopizator.history.models import FileChurn, FileStructuralDebt, Hotspot
 
 SCHEMA_VERSION = 1
 
@@ -59,4 +60,20 @@ def read_snapshot(path: Path) -> AuditResult:
         if score[name] is not None:
             score[name] = DimensionScore(**score[name])
     groups = tuple(CloneGroup(group["token_count"], tuple(CloneInstance(**item) for item in group["instances"]), group["fingerprint"]) for group in data["clone_groups"])
-    return AuditResult(inventory, ComplexityMetrics(**complexity), DuplicationMetrics(**data["duplication"]), ImportMetrics(**imports), completeness, SlopScore(**score), groups)
+    churn = tuple(FileChurn(**item) for item in data.get("churn", ()))
+    structural_debt = tuple(FileStructuralDebt(**item) for item in data.get("structural_debt", ()))
+    hotspots = tuple(Hotspot(**item) for item in data.get("hotspots", ()))
+    return AuditResult(
+        inventory,
+        ComplexityMetrics(**complexity),
+        DuplicationMetrics(**data["duplication"]),
+        ImportMetrics(**imports),
+        completeness,
+        SlopScore(**score),
+        groups,
+        churn,
+        structural_debt,
+        hotspots,
+        data.get("git_available", False),
+        tuple(data.get("history_reasons", ())),
+    )

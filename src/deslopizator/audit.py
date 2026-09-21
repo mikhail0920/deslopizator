@@ -5,6 +5,8 @@ from deslopizator.completeness.models import AnalysisStatus, AuditCompleteness, 
 from deslopizator.duplication.detector import analyze_duplication_facts
 from deslopizator.imports.graph import analyze_imports
 from deslopizator.inventory.classifier import discover_project
+from deslopizator.history.churn import analyze_churn
+from deslopizator.history.hotspots import build_hotspots, build_structural_debt
 from deslopizator.scoring.scorer import score
 
 
@@ -22,6 +24,9 @@ def analyze_project(path: Path | str) -> AuditResult:
     complexity, complexity_errors = analyze_complexity(production_paths)
     clone_groups, duplication, duplication_errors = analyze_duplication_facts(inventory)
     imports = analyze_imports(inventory)
+    churn, git_available, history_reasons = analyze_churn(inventory)
+    structural_debt = build_structural_debt(inventory, complexity, clone_groups, imports.metrics)
+    hotspots = build_hotspots(structural_debt, churn)
 
     import_reasons = tuple(
         f"unresolved local import: {item.source} -> {item.raw_import}"
@@ -48,4 +53,9 @@ def analyze_project(path: Path | str) -> AuditResult:
         completeness,
         score(complexity, duplication, import_metrics, completeness),
         clone_groups,
+        churn,
+        structural_debt,
+        hotspots,
+        git_available,
+        history_reasons,
     )
