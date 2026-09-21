@@ -1,15 +1,18 @@
 import argparse
 from deslopizator.discovery import discover_code_files
-from deslopizator.complexity import parse_python
+from deslopizator.complexity import analyze_file
 from pathlib import Path
 
 def audit(path: Path) -> int:
     python_files = discover_code_files(path)
     for file in python_files:
         print(file.relative_to(path))
-        functions = parse_python(file)
-        for func in functions:
-            print(f'\t{func.qualified_name:<20} CC {func.complexity:<3}\tlines {func.line}-{func.end_line}')
+        metrics = analyze_file(file)
+        for function in metrics.functions:
+            print(f'\t{function.qualified_name:<20} CC {function.complexity:>2}  SLOC {function.sloc:<3} nesting {function.max_nesting}')
+        print(f'\nFunctions: {len(metrics.functions)}')
+        print(f'Eroded: {metrics.eroded_function_count}')
+        print(f'Eroded mass: {metrics.eroded_mass_share:.1%}')
 
 def main():
     parser = argparse.ArgumentParser(description="A service for deterministic measurement of slop in the codebase.")
