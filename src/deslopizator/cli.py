@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from deslopizator.audit import analyze_project
+from deslopizator.scoring import ScoringParameters
 
 
 def audit(path: Path) -> int:
@@ -19,8 +20,31 @@ def audit(path: Path) -> int:
         ("Imports", result.completeness.imports),
     ):
         print(f"  {name:<14} {dimension.status.value}")
-        for reason in dimension.reasons:
-            print(f"    - {reason}")
+
+    score = result.score
+    total = "N/A" if score.total is None else f"{score.total:.1f}"
+    partial = " PARTIAL" if score.partial else ""
+    print(f"\nSlop Index: {total} / 100{partial}")
+    print(f"Scoring: {score.version}")
+    parameters = ScoringParameters()
+    for name, dimension, weight in (
+        ("Complexity", score.complexity, parameters.complexity_weight),
+        ("Duplication", score.duplication, parameters.duplication_weight),
+        ("Cycles", score.cycles, parameters.cycles_weight),
+    ):
+        maximum = 100 * weight
+        value = "N/A" if dimension is None else f"{maximum * dimension.score:.1f}"
+        print(f"{name:<15}{value:>5} / {maximum:.0f}")
+    partial_reasons = (
+        ("Complexity", result.completeness.complexity.reasons),
+        ("Duplication", result.completeness.duplication.reasons),
+        ("Imports", result.completeness.imports.reasons),
+    )
+    if any(reasons for _, reasons in partial_reasons):
+        print("\nPartial reasons:")
+        for name, reasons in partial_reasons:
+            for reason in reasons:
+                print(f"  {name}: {reason}")
 
     print("\nComplexity")
     print(f"Functions: {result.complexity.function_count}")

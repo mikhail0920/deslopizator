@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from deslopizator.models import ComplexityMetrics
     from deslopizator.duplication.models import DuplicationMetrics
     from deslopizator.imports.models import ImportMetrics
+    from deslopizator.scoring.models import SlopScore
 
 
 class AnalysisStatus(Enum):
@@ -36,3 +37,4 @@ class AuditResult:
     duplication: "DuplicationMetrics"
     imports: "ImportMetrics"
     completeness: AuditCompleteness
+    score: "SlopScore"

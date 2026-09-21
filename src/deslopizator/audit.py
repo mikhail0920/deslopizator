@@ -5,6 +5,7 @@ from deslopizator.completeness.models import AnalysisStatus, AuditCompleteness, 
 from deslopizator.duplication.detector import analyze_duplication_facts
 from deslopizator.imports.graph import analyze_imports
 from deslopizator.inventory.classifier import discover_project
+from deslopizator.scoring.scorer import score
 
 
 def _status_for_production(errors: tuple[str, ...], production_count: int) -> DimensionCompleteness:
@@ -38,4 +39,12 @@ def analyze_project(path: Path | str) -> AuditResult:
             )
         ),
     )
-    return AuditResult(inventory, complexity, duplication, imports.metrics, completeness)
+    import_metrics = imports.metrics
+    return AuditResult(
+        inventory,
+        complexity,
+        duplication,
+        import_metrics,
+        completeness,
+        score(complexity, duplication, import_metrics, completeness),
+    )
