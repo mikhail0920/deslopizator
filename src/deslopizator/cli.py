@@ -1,6 +1,7 @@
 import argparse
 import io
 import subprocess
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
@@ -9,6 +10,14 @@ from deslopizator.audit import analyze_project
 from deslopizator.policy import AuditDiff, evaluate, evaluate_diff, load_policy_config
 from deslopizator.scoring import ScoringParameters
 from deslopizator.snapshots import read_snapshot, write_snapshot
+
+
+def _symbol(value: str, fallback: str) -> str:
+    try:
+        value.encode(sys.stdout.encoding or "utf-8")
+    except (LookupError, UnicodeEncodeError):
+        return fallback
+    return value
 
 
 def audit(path: Path, json_path: Path | None = None) -> int:
@@ -111,10 +120,11 @@ def audit(path: Path, json_path: Path | None = None) -> int:
     for coupling in result.coupling:
         file_a = Path(coupling.file_a).relative_to(inventory.root).as_posix()
         file_b = Path(coupling.file_b).relative_to(inventory.root).as_posix()
-        print(f"\n  {file_a} ↔ {file_b}")
+        print(f"\n  {file_a} {_symbol('↔', '<->')} {file_b}")
         print(f"    changed together: {coupling.cochanges} times")
-        print(f"    A → B: {coupling.probability_b_given_a:.0%}")
-        print(f"    B → A: {coupling.probability_a_given_b:.0%}")
+        arrow = _symbol("→", "->")
+        print(f"    A {arrow} B: {coupling.probability_b_given_a:.0%}")
+        print(f"    B {arrow} A: {coupling.probability_a_given_b:.0%}")
         print(f"    static dependency: {'yes' if coupling.has_static_dependency else 'no'}")
         if not coupling.has_static_dependency:
             print("    Strong temporal coupling detected.")
@@ -122,6 +132,19 @@ def audit(path: Path, json_path: Path | None = None) -> int:
                 f"    These files changed together in {coupling.strength:.0%}+ of their changes."
             )
             print("    No direct static dependency was found.")
+
+    print("\nArchitecture")
+    architecture = result.architecture
+    if architecture is None or architecture.violation_count == 0:
+        print("  0 violations")
+    else:
+        print(f"\n  {architecture.violation_count} violations")
+        for violation in architecture.violations:
+            arrow = _symbol("→", "->")
+            print(f"\n  {violation.source_layer} {arrow} {violation.target_layer}")
+            print(f"    {violation.source_module}")
+            print(f"    imports {violation.target_module}")
+            print(f"    line {violation.line}")
     return 0
 
 
@@ -200,6 +223,8 @@ def compare(before: Path, after: Path) -> int:
         print(f"New eroded functions: {difference.new_eroded_functions}")
         print(f"New clone groups: {difference.new_clone_groups}")
         print(f"New cycle groups: {difference.new_cycle_groups}")
+        print(f"New architecture violations: {difference.new_architecture_violations}")
+        print(f"Resolved architecture violations: {difference.resolved_architecture_violations}")
         if baseline.score.partial or current.score.partial:
             print("PARTIAL: comparison includes incomplete analysis")
         return 0

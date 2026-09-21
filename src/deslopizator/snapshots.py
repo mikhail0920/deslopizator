@@ -11,6 +11,7 @@ from deslopizator.inventory.models import FileKind, ProjectInventory, SourceFile
 from deslopizator.models import ComplexityMetrics, FileComplexityMetrics, FunctionMetrics
 from deslopizator.scoring.models import DimensionScore, SlopScore
 from deslopizator.history.models import ChangeCoupling, FileChurn, FileStructuralDebt, Hotspot
+from deslopizator.architecture.models import ArchitectureMetrics, ArchitectureViolation
 
 SCHEMA_VERSION = 1
 
@@ -64,6 +65,11 @@ def read_snapshot(path: Path) -> AuditResult:
     structural_debt = tuple(FileStructuralDebt(**item) for item in data.get("structural_debt", ()))
     hotspots = tuple(Hotspot(**item) for item in data.get("hotspots", ()))
     coupling = tuple(ChangeCoupling(**item) for item in data.get("coupling", ()))
+    architecture_data = data.get("architecture", {})
+    architecture = ArchitectureMetrics(
+        architecture_data.get("violation_count", 0),
+        tuple(ArchitectureViolation(**item) for item in architecture_data.get("violations", ())),
+    )
     return AuditResult(
         inventory,
         ComplexityMetrics(**complexity),
@@ -80,4 +86,5 @@ def read_snapshot(path: Path) -> AuditResult:
         coupling,
         data.get("coupling_available", False),
         tuple(data.get("coupling_reasons", ())),
+        architecture,
     )

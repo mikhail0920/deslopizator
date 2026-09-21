@@ -14,6 +14,8 @@ class PolicyConfig:
     max_new_clone_groups: int = 0
     max_new_cycle_groups: int = 0
     allow_partial: bool = False
+    max_architecture_violations: int = 0
+    max_new_architecture_violations: int = 0
 
 def _number(document: dict, key: str, default, cast):
     try:
@@ -38,9 +40,11 @@ def load_policy_config(root: Path | str) -> PolicyConfig:
     complexity = policy.get("complexity", {})
     duplication = policy.get("duplication", {})
     cycles = policy.get("cycles", {})
+    architecture = policy.get("architecture", {})
     complexity = complexity if isinstance(complexity, dict) else {}
     duplication = duplication if isinstance(duplication, dict) else {}
     cycles = cycles if isinstance(cycles, dict) else {}
+    architecture = architecture if isinstance(architecture, dict) else {}
     raw_max = policy.get("max-score", 35.0)
     max_score = None if raw_max is None else _number({"value": raw_max}, "value", 35.0, float)
     return PolicyConfig(
@@ -51,4 +55,6 @@ def load_policy_config(root: Path | str) -> PolicyConfig:
         max_new_clone_groups=_number(duplication, "max-new-clone-groups", 0, int),
         max_new_cycle_groups=_number(cycles, "max-new-cycle-groups", 0, int),
         allow_partial=bool(policy.get("allow-partial", False)),
+        max_architecture_violations=_number(architecture, "max-violations", 0, int),
+        max_new_architecture_violations=_number(architecture, "max-new-violations", 0, int),
     )

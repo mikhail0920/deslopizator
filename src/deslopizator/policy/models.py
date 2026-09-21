@@ -31,6 +31,13 @@ def _clone_groups(result):
     return Counter(group.fingerprint for group in result.clone_groups)
 
 
+def _architecture_violations(result):
+    architecture = getattr(result, "architecture", None)
+    if architecture is None:
+        return Counter()
+    return Counter(violation.fingerprint for violation in architecture.violations)
+
+
 @dataclass(frozen=True)
 class AuditDiff:
     baseline: "AuditResult"
@@ -59,3 +66,11 @@ class AuditDiff:
         before = {frozenset(cycle.modules) for cycle in self.baseline.imports.cycles}
         after = {frozenset(cycle.modules) for cycle in self.current.imports.cycles}
         return len(after - before)
+
+    @property
+    def new_architecture_violations(self) -> int:
+        return sum((_architecture_violations(self.current) - _architecture_violations(self.baseline)).values())
+
+    @property
+    def resolved_architecture_violations(self) -> int:
+        return sum((_architecture_violations(self.baseline) - _architecture_violations(self.current)).values())

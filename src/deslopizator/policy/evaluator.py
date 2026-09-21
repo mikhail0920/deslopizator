@@ -17,6 +17,15 @@ def _partial_violations(result: AuditResult, config: PolicyConfig) -> list[Polic
 
 def evaluate(result: AuditResult, config: PolicyConfig) -> PolicyResult:
     violations = _partial_violations(result, config)
+    architecture = getattr(result, "architecture", None)
+    architecture_count = architecture.violation_count if architecture is not None else 0
+    if architecture_count > config.max_architecture_violations:
+        violations.append(_violation(
+            "max-architecture-violations",
+            str(config.max_architecture_violations),
+            str(architecture_count),
+            "architecture violations exceed budget",
+        ))
     if config.max_score is not None and result.score.total is not None and result.score.total > config.max_score:
         violations.append(_violation("max-score", f"<= {config.max_score:g}", f"{result.score.total:.1f}", "score exceeds maximum"))
     return PolicyResult(not violations, tuple(violations))
@@ -35,4 +44,11 @@ def evaluate_diff(diff: AuditDiff, config: PolicyConfig) -> PolicyResult:
         violations.append(_violation("max-new-clone-groups", str(config.max_new_clone_groups), str(diff.new_clone_groups), "new clone groups exceed budget"))
     if diff.new_cycle_groups > config.max_new_cycle_groups:
         violations.append(_violation("max-new-cycle-groups", str(config.max_new_cycle_groups), str(diff.new_cycle_groups), "new cycle groups exceed budget"))
+    if diff.new_architecture_violations > config.max_new_architecture_violations:
+        violations.append(_violation(
+            "max-new-architecture-violations",
+            str(config.max_new_architecture_violations),
+            str(diff.new_architecture_violations),
+            "new architecture violations exceed budget",
+        ))
     return PolicyResult(not violations, tuple(violations))

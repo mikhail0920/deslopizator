@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from deslopizator.imports.models import ImportMetrics
     from deslopizator.scoring.models import SlopScore
     from deslopizator.history.models import ChangeCoupling, FileChurn, FileStructuralDebt, Hotspot
+    from deslopizator.architecture.models import ArchitectureMetrics
 
 
 class AnalysisStatus(Enum):
@@ -54,3 +55,5 @@ class AuditResult:
     @property
     def change_coupling(self) -> tuple["ChangeCoupling", ...]:
         return self.coupling
+
+    architecture: "ArchitectureMetrics | None" = None

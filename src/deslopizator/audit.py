@@ -2,6 +2,8 @@ from pathlib import Path
 
 from deslopizator.complexity import analyze_complexity
 from deslopizator.completeness.models import AnalysisStatus, AuditCompleteness, AuditResult, DimensionCompleteness
+from deslopizator.architecture.evaluator import evaluate_architecture
+from deslopizator.architecture.parser import load_architecture_config
 from deslopizator.duplication.detector import analyze_duplication_facts
 from deslopizator.imports.graph import analyze_imports
 from deslopizator.inventory.classifier import discover_project
@@ -29,6 +31,11 @@ def analyze_project(path: Path | str) -> AuditResult:
     structural_debt = build_structural_debt(inventory, complexity, clone_groups, imports.metrics)
     hotspots = build_hotspots(structural_debt, churn)
     coupling, coupling_available, coupling_reasons = analyze_coupling(inventory, imports)
+    architecture = evaluate_architecture(
+        inventory,
+        imports.edges,
+        load_architecture_config(inventory.root),
+    )
 
     import_reasons = tuple(
         f"unresolved local import: {item.source} -> {item.raw_import}"
@@ -63,4 +70,5 @@ def analyze_project(path: Path | str) -> AuditResult:
         coupling,
         coupling_available,
         coupling_reasons,
+        architecture,
     )
