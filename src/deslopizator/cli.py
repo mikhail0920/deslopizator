@@ -2,6 +2,7 @@ import argparse
 from deslopizator.discovery import discover_code_files
 from deslopizator.complexity import analyze_file
 from deslopizator.duplication import analyze_duplication
+from deslopizator.imports import analyze_imports
 from pathlib import Path
 
 def audit(path: Path) -> int:
@@ -26,6 +27,24 @@ def audit(path: Path) -> int:
     print(f'\nClone groups: {duplication.clone_group_count}')
     print(f'Duplicated lines: {duplication.duplicated_lines}')
     print(f'Duplication density: {duplication.duplication_density:.1%}')
+
+    if path.is_file():
+        source_root = path.parent
+    else:
+        source_root = path / 'src' if (path / 'src').is_dir() else path
+    imports = analyze_imports(python_files, source_root)
+    print('\nImport cycles')
+    for index, cycle in enumerate(imports.cycles, start=1):
+        print(f'\n  Cycle {index}')
+        for module in cycle.modules:
+            print(f'    {module}')
+    print(f'\nModules: {imports.metrics.internal_module_count}')
+    print(f'Runtime edges: {imports.metrics.runtime_edge_count}')
+    print(f'Cyclic modules: {imports.metrics.modules_in_cycles}')
+    print(f'Cycle density: {imports.metrics.cycle_density:.1%}')
+    if imports.metrics.unresolved_import_count:
+        print('\nAnalysis warnings:')
+        print(f'  {imports.metrics.unresolved_import_count} unresolved imports')
 
 def main():
     parser = argparse.ArgumentParser(description="A service for deterministic measurement of slop in the codebase.")
