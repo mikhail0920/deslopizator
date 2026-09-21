@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from itertools import combinations
 from pathlib import Path
+import tokenize
 
 from deslopizator.duplication.models import CloneGroup, CloneInstance, DuplicationMetrics, NormalizedToken
 from deslopizator.duplication.tokenizer import normalize_file, production_sloc
@@ -143,8 +144,14 @@ def _merge_candidates(candidates: list[_Candidate], files: list[_TokenFile]) -> 
     )
 
 
+def _analysis_paths(paths_or_inventory) -> list[Path]:
+    if hasattr(paths_or_inventory, "production_files"):
+        return [Path(file.path) for file in paths_or_inventory.production_files]
+    return [Path(path) for path in paths_or_inventory]
+
+
 def detect_clones(paths: list[Path | str], minimum_tokens: int = 100) -> tuple[CloneGroup, ...]:
-    normalized_paths = sorted((Path(path) for path in paths), key=str)
+    normalized_paths = sorted(_analysis_paths(paths), key=str)
     files = [_TokenFile(path, normalize_file(path), production_sloc(path.read_text(encoding="utf-8"))) for path in normalized_paths]
     return tuple(_merge_candidates(_collect_candidates(files, minimum_tokens), files))
 
@@ -158,7 +165,7 @@ def _duplicated_lines(groups: tuple[CloneGroup, ...]) -> int:
 
 
 def analyze_duplication(paths: list[Path | str], minimum_tokens: int = 100) -> tuple[tuple[CloneGroup, ...], DuplicationMetrics]:
-    normalized_paths = [Path(path) for path in paths]
+    normalized_paths = _analysis_paths(paths)
     groups = detect_clones(normalized_paths, minimum_tokens)
     production_lines = sum(production_sloc(path.read_text(encoding="utf-8")) for path in normalized_paths)
     duplicated_lines = _duplicated_lines(groups)
@@ -171,3 +178,17 @@ def analyze_duplication(paths: list[Path | str], minimum_tokens: int = 100) -> t
         duplication_density=density,
     )
     return groups, metrics
+
+
+def analyze_duplication_facts(paths_or_inventory, minimum_tokens: int = 100):
+    paths = _analysis_paths(paths_or_inventory)
+    valid_paths: list[Path] = []
+    errors: list[str] = []
+    for path in paths:
+        try:
+            normalize_file(path)
+            valid_paths.append(path)
+        except (OSError, SyntaxError, tokenize.TokenError) as error:
+            errors.append(f"{path}: {error}")
+    groups, metrics = analyze_duplication(valid_paths, minimum_tokens)
+    return groups, metrics, tuple(errors)

@@ -55,8 +55,18 @@ def find_cycles(graph: dict[str, set[str]]) -> tuple[ImportCycle, ...]:
     return tuple(ImportCycle(modules) for modules in sorted(components))
 
 
-def analyze_imports(paths: list[Path | str], source_root: Path | str) -> ImportAnalysis:
-    normalized_paths = sorted((Path(path) for path in paths), key=str)
+def _analysis_paths(paths_or_inventory) -> list[Path]:
+    if hasattr(paths_or_inventory, "production_files"):
+        return [Path(file.path) for file in paths_or_inventory.production_files]
+    return [Path(path) for path in paths_or_inventory]
+
+
+def analyze_imports(paths: list[Path | str], source_root: Path | str | None = None) -> ImportAnalysis:
+    normalized_paths = sorted(_analysis_paths(paths), key=str)
+    if source_root is None and hasattr(paths, "source_roots"):
+        source_root = paths.source_roots[0]
+    if source_root is None:
+        raise ValueError("source_root is required when analyzing a path list")
     root = Path(source_root)
     internal = internal_module_names(normalized_paths, root)
     edges: list[ImportEdge] = []
@@ -65,7 +75,11 @@ def analyze_imports(paths: list[Path | str], source_root: Path | str) -> ImportA
         if not path.resolve().is_relative_to(root.resolve()):
             continue
         source = module_name_for_path(path, root)
-        for parsed in parse_file(path):
+        try:
+            parsed_imports = parse_file(path)
+        except (OSError, SyntaxError):
+            continue
+        for parsed in parsed_imports:
             resolved = resolve_import(source, parsed, internal)
             if isinstance(resolved, ImportEdge):
                 edges.append(resolved)
@@ -84,5 +98,6 @@ def analyze_imports(paths: list[Path | str], source_root: Path | str) -> ImportA
         modules_in_cycles=modules_in_cycles,
         cycle_density=modules_in_cycles / internal_count if internal_count else 0.0,
         unresolved_import_count=len(unresolved_tuple),
+        cycles=cycles,
     )
     return ImportAnalysis(edge_tuple, unresolved_tuple, cycles, metrics)

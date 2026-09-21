@@ -41,3 +41,12 @@ class FileComplexityMetrics:
         if self.total_function_mass == 0:
             return 0.0
         return self.eroded_function_mass / self.total_function_mass
+
+
+@dataclass(frozen=True)
+class ComplexityMetrics:
+    files: tuple[FileComplexityMetrics, ...]
+    function_count: int
+    total_function_mass: float
+    eroded_function_mass: float
+    eroded_function_count: int

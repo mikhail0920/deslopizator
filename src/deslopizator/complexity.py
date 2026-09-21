@@ -4,7 +4,7 @@ import tokenize
 from dataclasses import dataclass
 from pathlib import Path
 
-from deslopizator.models import FileComplexityMetrics, FunctionMetrics
+from deslopizator.models import ComplexityMetrics, FileComplexityMetrics, FunctionMetrics
 
 
 @dataclass(frozen=True)
@@ -272,3 +272,27 @@ def analyze_file(path: Path) -> FileComplexityMetrics:
 
 
 parse_file = analyze_file
+
+
+def analyze_complexity(paths_or_inventory) -> tuple[ComplexityMetrics, tuple[str, ...]]:
+    if hasattr(paths_or_inventory, "production_files"):
+        paths = [Path(file.path) for file in paths_or_inventory.production_files]
+    else:
+        paths = [Path(path) for path in paths_or_inventory]
+    files: list[FileComplexityMetrics] = []
+    errors: list[str] = []
+    for raw_path in sorted(paths, key=str):
+        try:
+            files.append(analyze_file(raw_path))
+        except (OSError, SyntaxError) as error:
+            errors.append(f"{raw_path}: {error}")
+    file_tuple = tuple(files)
+    functions = tuple(function for file in file_tuple for function in file.functions)
+    metrics = ComplexityMetrics(
+        files=file_tuple,
+        function_count=len(functions),
+        total_function_mass=sum(function.mass for function in functions),
+        eroded_function_mass=sum(function.mass for function in functions if function.eroded),
+        eroded_function_count=sum(function.eroded for function in functions),
+    )
+    return metrics, tuple(errors)

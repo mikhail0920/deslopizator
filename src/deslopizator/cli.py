@@ -1,50 +1,52 @@
 import argparse
-from deslopizator.discovery import discover_code_files
-from deslopizator.complexity import analyze_file
-from deslopizator.duplication import analyze_duplication
-from deslopizator.imports import analyze_imports
 from pathlib import Path
 
+from deslopizator.audit import analyze_project
+
+
 def audit(path: Path) -> int:
-    python_files = discover_code_files(path)
-    display_root = path.parent if path.is_file() else path
-    for file in python_files:
-        print(file.relative_to(display_root))
-        metrics = analyze_file(file)
-        for function in metrics.functions:
-            print(f'\t{function.qualified_name:<20} CC {function.complexity:>2}  SLOC {function.sloc:<3} nesting {function.max_nesting}')
-        print(f'\nFunctions: {len(metrics.functions)}')
-        print(f'Eroded: {metrics.eroded_function_count}')
-        print(f'Eroded mass: {metrics.eroded_mass_share:.1%}')
+    result = analyze_project(path)
+    inventory = result.inventory
+    print("Analysis\n")
+    print(f"  Production files: {len(inventory.production_files)}")
+    print(f"  Test files:       {len(inventory.test_files)}")
+    print(f"  Generated files:  {len(inventory.generated_files)}")
+    print(f"  Excluded files:   {len(inventory.excluded_files)}")
+    print()
+    for name, dimension in (
+        ("Complexity", result.completeness.complexity),
+        ("Duplication", result.completeness.duplication),
+        ("Imports", result.completeness.imports),
+    ):
+        print(f"  {name:<14} {dimension.status.value}")
+        for reason in dimension.reasons:
+            print(f"    - {reason}")
 
-    groups, duplication = analyze_duplication(python_files)
-    print('\nDuplication')
-    for index, group in enumerate(groups, start=1):
-        print(f'\n  Clone group {index} — {group.token_count} tokens')
-        for instance in group.instances:
-            instance_path = Path(instance.path).relative_to(display_root)
-            print(f'\n    {instance_path}:{instance.start_line}-{instance.end_line}')
-    print(f'\nClone groups: {duplication.clone_group_count}')
-    print(f'Duplicated lines: {duplication.duplicated_lines}')
-    print(f'Duplication density: {duplication.duplication_density:.1%}')
-
-    if path.is_file():
-        source_root = path.parent
+    print("\nComplexity")
+    print(f"Functions: {result.complexity.function_count}")
+    print(f"Eroded: {result.complexity.eroded_function_count}")
+    if result.complexity.total_function_mass:
+        share = result.complexity.eroded_function_mass / result.complexity.total_function_mass
     else:
-        source_root = path / 'src' if (path / 'src').is_dir() else path
-    imports = analyze_imports(python_files, source_root)
-    print('\nImport cycles')
-    for index, cycle in enumerate(imports.cycles, start=1):
-        print(f'\n  Cycle {index}')
+        share = 0.0
+    print(f"Eroded mass: {share:.1%}")
+    print("\nDuplication")
+    print(f"Clone groups: {result.duplication.clone_group_count}")
+    print(f"Duplicated lines: {result.duplication.duplicated_lines}")
+    print(f"Duplication density: {result.duplication.duplication_density:.1%}")
+    print("\nImport cycles")
+    for index, cycle in enumerate(result.imports.cycles, start=1):
+        print(f"\n  Cycle {index}")
         for module in cycle.modules:
-            print(f'    {module}')
-    print(f'\nModules: {imports.metrics.internal_module_count}')
-    print(f'Runtime edges: {imports.metrics.runtime_edge_count}')
-    print(f'Cyclic modules: {imports.metrics.modules_in_cycles}')
-    print(f'Cycle density: {imports.metrics.cycle_density:.1%}')
-    if imports.metrics.unresolved_import_count:
-        print('\nAnalysis warnings:')
-        print(f'  {imports.metrics.unresolved_import_count} unresolved imports')
+            print(f"    {module}")
+    print(f"Modules: {result.imports.internal_module_count}")
+    print(f"Runtime edges: {result.imports.runtime_edge_count}")
+    print(f"Cyclic modules: {result.imports.modules_in_cycles}")
+    print(f"Cycle density: {result.imports.cycle_density:.1%}")
+    if result.imports.unresolved_import_count:
+        print("\nAnalysis warnings:")
+        print(f"  {result.imports.unresolved_import_count} unresolved imports")
+
 
 def main():
     parser = argparse.ArgumentParser(description="A service for deterministic measurement of slop in the codebase.")
@@ -56,5 +58,5 @@ def main():
         audit(args.path)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -30,6 +30,7 @@ class ImportMetrics:
     modules_in_cycles: int
     cycle_density: float
     unresolved_import_count: int
+    cycles: tuple[ImportCycle, ...] = ()
 
 
 @dataclass(frozen=True)
