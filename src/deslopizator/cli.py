@@ -9,7 +9,7 @@ def audit(path: Path) -> int:
         print(file.relative_to(path))
         functions = parse_python(file)
         for func in functions:
-            print(f'\t{func.name:<20} CC {func.complexity:<3}\tlines {func.line}-{func.end_line}')
+            print(f'\t{func.qualified_name:<20} CC {func.complexity:<3}\tlines {func.line}-{func.end_line}')
 
 def main():
     parser = argparse.ArgumentParser(description="A service for deterministic measurement of slop in the codebase.")

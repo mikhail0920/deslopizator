@@ -4,6 +4,7 @@ from dataclasses import dataclass
 class FunctionComplexity:
     path: str
     name: str
+    qualified_name: str
     line: int
     end_line: int
     complexity: int
