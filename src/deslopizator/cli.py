@@ -8,10 +8,17 @@ from pathlib import Path
 from deslopizator.audit import analyze_project
 from deslopizator.policy import AuditDiff, evaluate, evaluate_diff, load_policy_config
 from deslopizator.scoring import ScoringParameters
+from deslopizator.snapshots import read_snapshot, write_snapshot
 
 
-def audit(path: Path) -> int:
-    result = analyze_project(path)
+def audit(path: Path, json_path: Path | None = None) -> int:
+    try:
+        result = analyze_project(path)
+        if json_path is not None:
+            write_snapshot(result, json_path)
+    except Exception as exc:
+        print(f"Analysis failed: {exc}")
+        return 2
     inventory = result.inventory
     print("Analysis\n")
     print(f"  Production files: {len(inventory.production_files)}")
@@ -59,10 +66,18 @@ def audit(path: Path) -> int:
     else:
         share = 0.0
     print(f"Eroded mass: {share:.1%}")
+    for file in result.complexity.files:
+        for function in file.functions:
+            if function.eroded:
+                print(f"  {Path(file.path).relative_to(inventory.root)}:{function.line} {function.qualified_name} CC={function.complexity}")
     print("\nDuplication")
     print(f"Clone groups: {result.duplication.clone_group_count}")
     print(f"Duplicated lines: {result.duplication.duplicated_lines}")
     print(f"Duplication density: {result.duplication.duplication_density:.1%}")
+    for group in result.clone_groups:
+        print(f"  Clone ({group.token_count} tokens):")
+        for instance in group.instances:
+            print(f"    {Path(instance.path).relative_to(inventory.root)}:{instance.start_line}-{instance.end_line}")
     print("\nImport cycles")
     for index, cycle in enumerate(result.imports.cycles, start=1):
         print(f"\n  Cycle {index}")
@@ -86,9 +101,13 @@ def _audit_ref(path: Path, reference: str):
     except (OSError, subprocess.CalledProcessError) as exc:
         raise RuntimeError(f"cannot read baseline {reference}: {exc}") from exc
     temporary = tempfile.TemporaryDirectory()
-    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as stream:
-        stream.extractall(temporary.name)
-    return temporary, analyze_project(Path(temporary.name))
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as stream:
+            stream.extractall(temporary.name, filter="data")
+        return temporary, analyze_project(Path(temporary.name))
+    except Exception:
+        temporary.cleanup()
+        raise
 
 
 def _print_policy(result, title: str = "Policy") -> None:
@@ -121,7 +140,7 @@ def check(path: Path, against: str | None) -> int:
     if against is not None:
         before = "N/A" if baseline.score.total is None else f"{baseline.score.total:.1f}"
         after = "N/A" if current.score.total is None else f"{current.score.total:.1f}"
-        print(f"Slop Index: {before} → {after}")
+        print(f"Slop Index: {before} -> {after}")
     return 0 if policy.passed else 1
 
 
@@ -130,7 +149,7 @@ def diff(path: Path, reference: str) -> int:
         current = analyze_project(path)
         temporary, baseline = _audit_ref(path, reference)
         try:
-            print(f"Slop Index: {baseline.score.total if baseline.score.total is not None else 'N/A'} → {current.score.total if current.score.total is not None else 'N/A'}")
+            print(f"Slop Index: {baseline.score.total if baseline.score.total is not None else 'N/A'} -> {current.score.total if current.score.total is not None else 'N/A'}")
         finally:
             temporary.cleanup()
     except Exception as exc:
@@ -139,11 +158,33 @@ def diff(path: Path, reference: str) -> int:
     return 0
 
 
+def compare(before: Path, after: Path) -> int:
+    try:
+        baseline, current = read_snapshot(before), read_snapshot(after)
+        if baseline.score.version != current.score.version:
+            raise ValueError("incompatible scoring versions")
+        difference = AuditDiff(baseline, current)
+        print(f"Slop Index: {baseline.score.total} -> {current.score.total}")
+        print(f"New eroded functions: {difference.new_eroded_functions}")
+        print(f"New clone groups: {difference.new_clone_groups}")
+        print(f"New cycle groups: {difference.new_cycle_groups}")
+        if baseline.score.partial or current.score.partial:
+            print("PARTIAL: comparison includes incomplete analysis")
+        return 0
+    except Exception as exc:
+        print(f"Comparison failed: {exc}")
+        return 2
+
+
 def main():
     parser = argparse.ArgumentParser(description="A service for deterministic measurement of slop in the codebase.")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
     audit_parser = subparsers.add_parser("audit", help="Start audit directory")
     audit_parser.add_argument("path", type=Path, help="Path to directory to audit")
+    audit_parser.add_argument("--json", type=Path, dest="json_path", help="Write a portable JSON snapshot")
+    compare_parser = subparsers.add_parser("compare", help="Compare two JSON snapshots")
+    compare_parser.add_argument("before", type=Path)
+    compare_parser.add_argument("after", type=Path)
     diff_parser = subparsers.add_parser("diff", help="Compare with a Git baseline")
     diff_parser.add_argument("reference", help="Git reference")
     diff_parser.add_argument("path", type=Path, nargs="?", default=Path("."))
@@ -152,7 +193,9 @@ def main():
     check_parser.add_argument("--against", help="Git baseline reference")
     args = parser.parse_args()
     if args.cmd == "audit":
-        return audit(args.path)
+        return audit(args.path, args.json_path)
+    if args.cmd == "compare":
+        return compare(args.before, args.after)
     if args.cmd == "diff":
         return diff(args.path, args.reference)
     if args.cmd == "check":
@@ -161,4 +204,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

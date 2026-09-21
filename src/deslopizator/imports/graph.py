@@ -3,7 +3,7 @@ from pathlib import Path
 
 from deslopizator.imports.models import ImportAnalysis, ImportCycle, ImportEdge, ImportMetrics, UnresolvedImport
 from deslopizator.imports.parser import parse_file
-from deslopizator.imports.resolver import internal_module_names, module_name_for_path, resolve_import
+from deslopizator.imports.resolver import module_name_for_path, resolve_imports
 
 
 def build_graph(edges: tuple[ImportEdge, ...] | list[ImportEdge]) -> dict[str, set[str]]:
@@ -64,27 +64,36 @@ def _analysis_paths(paths_or_inventory) -> list[Path]:
 def analyze_imports(paths: list[Path | str], source_root: Path | str | None = None) -> ImportAnalysis:
     normalized_paths = sorted(_analysis_paths(paths), key=str)
     if source_root is None and hasattr(paths, "source_roots"):
-        source_root = paths.source_roots[0]
-    if source_root is None:
-        raise ValueError("source_root is required when analyzing a path list")
-    root = Path(source_root)
-    internal = internal_module_names(normalized_paths, root)
+        modules = {Path(file.path): file.module for file in paths.production_files}
+    else:
+        if source_root is None:
+            raise ValueError("source_root is required when analyzing a path list")
+        root = Path(source_root).resolve()
+        modules = {
+            path: module_name_for_path(path, root)
+            for path in normalized_paths if path.resolve().is_relative_to(root)
+        }
+    internal = {module for module in modules.values() if module}
+    packages = {module for path, module in modules.items() if path.name == "__init__.py" and module}
     edges: list[ImportEdge] = []
     unresolved: list[UnresolvedImport] = []
+    errors: list[str] = []
     for path in normalized_paths:
-        if not path.resolve().is_relative_to(root.resolve()):
+        source = modules.get(path)
+        if not source:
+            errors.append(f"{path}: no module name in configured source roots")
             continue
-        source = module_name_for_path(path, root)
         try:
             parsed_imports = parse_file(path)
-        except (OSError, SyntaxError):
+        except (OSError, SyntaxError, UnicodeError) as error:
+            errors.append(f"{path}: {error}")
             continue
         for parsed in parsed_imports:
-            resolved = resolve_import(source, parsed, internal)
-            if isinstance(resolved, ImportEdge):
-                edges.append(resolved)
-            elif isinstance(resolved, UnresolvedImport):
-                unresolved.append(resolved)
+            for resolved in resolve_imports(source, parsed, internal, packages):
+                if isinstance(resolved, ImportEdge):
+                    edges.append(resolved)
+                else:
+                    unresolved.append(resolved)
     edge_tuple = tuple(sorted(edges, key=lambda edge: (edge.source, edge.target, edge.line, edge.kind)))
     unresolved_tuple = tuple(sorted(unresolved, key=lambda item: (item.source, item.line, item.raw_import)))
     cycles = find_cycles(build_graph(edge_tuple))
@@ -100,4 +109,4 @@ def analyze_imports(paths: list[Path | str], source_root: Path | str | None = No
         unresolved_import_count=len(unresolved_tuple),
         cycles=cycles,
     )
-    return ImportAnalysis(edge_tuple, unresolved_tuple, cycles, metrics)
+    return ImportAnalysis(edge_tuple, unresolved_tuple, cycles, metrics, tuple(errors))

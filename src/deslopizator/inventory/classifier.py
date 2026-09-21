@@ -1,5 +1,8 @@
 import fnmatch
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 from pathlib import Path, PurePosixPath
 
 from deslopizator.inventory.models import FileKind, ProjectConfig, ProjectInventory, SourceFile
@@ -68,6 +71,10 @@ def _module_for_path(path: Path, root: Path, source_roots: tuple[Path, ...]) -> 
 
 def discover_project(path: Path | str) -> ProjectInventory:
     requested = Path(path).resolve()
+    if not requested.exists():
+        raise FileNotFoundError(f"analysis path does not exist: {requested}")
+    if not requested.is_dir() and (not requested.is_file() or requested.suffix != ".py"):
+        raise ValueError(f"expected a directory or Python source file: {requested}")
     root = requested.parent if requested.is_file() else requested
     config = load_config(root)
     configured_roots = tuple((root / source_root).resolve() for source_root in config.source_roots)

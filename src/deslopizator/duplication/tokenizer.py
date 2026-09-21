@@ -51,10 +51,14 @@ def normalize_file(path: Path) -> tuple[NormalizedToken, ...]:
     return normalize_source(path.read_text(encoding="utf-8"))
 
 
-def production_sloc(source: str) -> int:
+def production_code_lines(source: str) -> set[int]:
     lines: set[int] = set()
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if token.type in _IGNORED_TOKEN_TYPES | {tokenize.INDENT, tokenize.DEDENT}:
             continue
         lines.update(range(token.start[0], token.end[0] + 1))
-    return len(lines)
+    return lines
+
+
+def production_sloc(source: str) -> int:
+    return len(production_code_lines(source))

@@ -6,7 +6,7 @@ from pathlib import Path
 import tokenize
 
 from deslopizator.duplication.models import CloneGroup, CloneInstance, DuplicationMetrics, NormalizedToken
-from deslopizator.duplication.tokenizer import normalize_file, production_sloc
+from deslopizator.duplication.tokenizer import normalize_file, production_sloc, production_code_lines
 
 
 @dataclass(frozen=True)
@@ -132,7 +132,9 @@ def _merge_candidates(candidates: list[_Candidate], files: list[_TokenFile]) -> 
             tokens = files[file_index].tokens
             end_token = next(token for token in reversed(tokens[start:end]) if token.value not in {"INDENT", "DEDENT"})
             instances.append(CloneInstance(str(files[file_index].path), tokens[start].line, end_token.line))
-        groups.append(CloneGroup(token_count, tuple(sorted(set(instances), key=lambda item: (item.path, item.start_line, item.end_line)))))
+        file_index, start, end = occurrences[0]
+        fingerprint = _window_hash(files[file_index].tokens, start, end - start).hex()
+        groups.append(CloneGroup(token_count, tuple(sorted(set(instances), key=lambda item: (item.path, item.start_line, item.end_line))), fingerprint))
     return sorted(
         groups,
         key=lambda group: (
@@ -161,7 +163,10 @@ def _duplicated_lines(groups: tuple[CloneGroup, ...]) -> int:
     for group in groups:
         for instance in group.instances:
             lines_by_path[instance.path].update(range(instance.start_line, instance.end_line + 1))
-    return sum(len(lines) for lines in lines_by_path.values())
+    return sum(
+        len(lines & production_code_lines(Path(path).read_text(encoding="utf-8")))
+        for path, lines in lines_by_path.items()
+    )
 
 
 def analyze_duplication(paths: list[Path | str], minimum_tokens: int = 100) -> tuple[tuple[CloneGroup, ...], DuplicationMetrics]:
@@ -188,7 +193,7 @@ def analyze_duplication_facts(paths_or_inventory, minimum_tokens: int = 100):
         try:
             normalize_file(path)
             valid_paths.append(path)
-        except (OSError, SyntaxError, tokenize.TokenError) as error:
+        except (OSError, SyntaxError, UnicodeError, tokenize.TokenError) as error:
             errors.append(f"{path}: {error}")
     groups, metrics = analyze_duplication(valid_paths, minimum_tokens)
     return groups, metrics, tuple(errors)

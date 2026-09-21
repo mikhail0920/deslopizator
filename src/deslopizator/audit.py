@@ -20,13 +20,13 @@ def analyze_project(path: Path | str) -> AuditResult:
     inventory = discover_project(path)
     production_paths = [Path(file.path) for file in inventory.production_files]
     complexity, complexity_errors = analyze_complexity(production_paths)
-    _, duplication, duplication_errors = analyze_duplication_facts(inventory)
+    clone_groups, duplication, duplication_errors = analyze_duplication_facts(inventory)
     imports = analyze_imports(inventory)
 
     import_reasons = tuple(
         f"unresolved local import: {item.source} -> {item.raw_import}"
         for item in imports.unresolved
-    )
+    ) + imports.errors
     completeness = AuditCompleteness(
         complexity=_status_for_production(complexity_errors, len(production_paths)),
         duplication=_status_for_production(duplication_errors, len(production_paths)),
@@ -47,4 +47,5 @@ def analyze_project(path: Path | str) -> AuditResult:
         import_metrics,
         completeness,
         score(complexity, duplication, import_metrics, completeness),
+        clone_groups,
     )

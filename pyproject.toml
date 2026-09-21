@@ -5,9 +5,9 @@ description = "A service for deterministic measurement of slop in the codebase."
 authors = [
     {name = "Mikhail0920",email = "m.ilchen@yandex.ru"}
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
-    "pytest (>=9.1.1,<10.0.0)"
+    "tomli>=2.0; python_version < '3.11'"
 ]
 
 
@@ -15,9 +15,9 @@ dependencies = [
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.poetry.scripts]
+[project.scripts]
 deslop = "deslopizator.cli:main"
 
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.poetry.group.dev.dependencies]
+pytest = ">=9.1.1,<10.0.0"

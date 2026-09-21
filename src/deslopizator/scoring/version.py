@@ -1,1 +1,1 @@
-SCORING_VERSION = "python-0.1-provisional"
+SCORING_VERSION = "python-0.2-provisional"

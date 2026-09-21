@@ -39,3 +39,4 @@ class ImportAnalysis:
     unresolved: tuple[UnresolvedImport, ...]
     cycles: tuple[ImportCycle, ...]
     metrics: ImportMetrics
+    errors: tuple[str, ...] = ()

@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from pathlib import Path
+from collections import Counter
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -16,6 +18,19 @@ class PolicyResult:
     passed: bool
     violations: tuple[PolicyViolation, ...]
 
+def _eroded_functions(result):
+    root = Path(result.inventory.root)
+    return Counter(
+        (Path(file.path).relative_to(root).as_posix(), function.qualified_name)
+        for file in result.complexity.files
+        for function in file.functions if function.eroded
+    )
+
+
+def _clone_groups(result):
+    return Counter(group.fingerprint for group in result.clone_groups)
+
+
 @dataclass(frozen=True)
 class AuditDiff:
     baseline: "AuditResult"
@@ -29,7 +44,7 @@ class AuditDiff:
 
     @property
     def new_eroded_functions(self) -> int:
-        return max(0, self.current.complexity.eroded_function_count - self.baseline.complexity.eroded_function_count)
+        return sum((_eroded_functions(self.current) - _eroded_functions(self.baseline)).values())
 
     @property
     def density_increase(self) -> float:
@@ -37,8 +52,10 @@ class AuditDiff:
 
     @property
     def new_clone_groups(self) -> int:
-        return max(0, self.current.duplication.clone_group_count - self.baseline.duplication.clone_group_count)
+        return sum((_clone_groups(self.current) - _clone_groups(self.baseline)).values())
 
     @property
     def new_cycle_groups(self) -> int:
-        return max(0, self.current.imports.cycle_group_count - self.baseline.imports.cycle_group_count)
+        before = {frozenset(cycle.modules) for cycle in self.baseline.imports.cycles}
+        after = {frozenset(cycle.modules) for cycle in self.current.imports.cycles}
+        return len(after - before)

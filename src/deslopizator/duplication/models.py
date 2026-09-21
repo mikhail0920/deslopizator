@@ -19,6 +19,7 @@ class CloneInstance:
 class CloneGroup:
     token_count: int
     instances: tuple[CloneInstance, ...]
+    fingerprint: str = ""
 
 
 @dataclass(frozen=True)

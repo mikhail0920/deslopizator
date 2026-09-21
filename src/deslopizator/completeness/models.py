@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from deslopizator.duplication.models import CloneGroup
+
 if TYPE_CHECKING:
     from deslopizator.inventory.models import ProjectInventory
     from deslopizator.models import ComplexityMetrics
@@ -38,3 +40,4 @@ class AuditResult:
     imports: "ImportMetrics"
     completeness: AuditCompleteness
     score: "SlopScore"
+    clone_groups: tuple[CloneGroup, ...] = ()

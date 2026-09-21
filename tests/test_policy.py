@@ -7,7 +7,7 @@ from deslopizator.policy import AuditDiff, PolicyConfig, evaluate, evaluate_diff
 def audit(*, score=20.0, eroded=0, density=0.0, clones=0, cycles=0, partial=False):
     status = AnalysisStatus.PARTIAL if partial else AnalysisStatus.COMPLETE
     dimension = DimensionCompleteness(status, ("unresolved local import",) if partial else ())
-    return SimpleNamespace(score=SimpleNamespace(total=score), complexity=SimpleNamespace(eroded_function_count=eroded), duplication=SimpleNamespace(duplication_density=density, clone_group_count=clones), imports=SimpleNamespace(cycle_group_count=cycles), completeness=AuditCompleteness(dimension, dimension, dimension))
+    return SimpleNamespace(inventory=SimpleNamespace(root="."), clone_groups=tuple(SimpleNamespace(fingerprint=str(i)) for i in range(clones)), score=SimpleNamespace(total=score, version="test"), complexity=SimpleNamespace(eroded_function_count=eroded, files=(SimpleNamespace(path="app.py", functions=tuple(SimpleNamespace(qualified_name=f"f{i}", eroded=True) for i in range(eroded))),)), duplication=SimpleNamespace(duplication_density=density, clone_group_count=clones), imports=SimpleNamespace(cycle_group_count=cycles, cycles=tuple(SimpleNamespace(modules=(f"a{i}", f"b{i}")) for i in range(cycles))), completeness=AuditCompleteness(dimension, dimension, dimension))
 
 def test_old_high_score_does_not_fail_diff_policy():
     assert evaluate_diff(AuditDiff(audit(score=62), audit(score=61)), PolicyConfig(max_score_increase=0)).passed

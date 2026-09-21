@@ -129,7 +129,6 @@ class NestingVisitor(ast.NodeVisitor):
         if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
             self.depth -= 1
             self.visit(node.orelse[0])
-            self.depth -= 1
         else:
             for statement in node.orelse:
                 self.visit(statement)
@@ -284,7 +283,7 @@ def analyze_complexity(paths_or_inventory) -> tuple[ComplexityMetrics, tuple[str
     for raw_path in sorted(paths, key=str):
         try:
             files.append(analyze_file(raw_path))
-        except (OSError, SyntaxError) as error:
+        except (OSError, SyntaxError, UnicodeError) as error:
             errors.append(f"{raw_path}: {error}")
     file_tuple = tuple(files)
     functions = tuple(function for file in file_tuple for function in file.functions)
