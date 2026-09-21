@@ -113,10 +113,10 @@ def test_replacing_clone_structure_is_a_new_problem(tmp_path):
     assert AuditDiff(before, after).new_clone_groups == 1
 
 
-def test_partial_baseline_rejected(tmp_path):
+def test_partial_baseline_does_not_block_when_current_is_complete(tmp_path):
     before = analyze_project(project(tmp_path / "before", {"app.py": "def broken(:"}))
     after = analyze_project(project(tmp_path / "after", {"app.py": "x=1"}))
-    assert not evaluate_diff(AuditDiff(before, after), PolicyConfig()).passed
+    assert evaluate_diff(AuditDiff(before, after), PolicyConfig()).passed
 
 
 def test_snapshots_are_portable_deterministic_and_roundtrip(tmp_path):
@@ -175,3 +175,36 @@ def test_git_baseline_check_reports_new_function(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "max-new-eroded-functions" in output
     assert " -> " in output
+
+
+def test_check_against_legacy_baseline_allows_same_architecture_violation(tmp_path):
+    project(
+        tmp_path,
+        {
+            "pyproject.toml": """[tool.deslop]
+source-roots = ["."]
+
+[[tool.deslop.architecture.layers]]
+name = "domain"
+include = ["app.domain.**"]
+[[tool.deslop.architecture.layers]]
+name = "infra"
+include = ["app.infrastructure.**"]
+[[tool.deslop.architecture.forbidden]]
+from = "domain"
+to = "infra"
+""",
+            "app/domain/order.py": "import app.infrastructure.database\n",
+            "app/infrastructure/database.py": "value = 1\n",
+        },
+    )
+    subprocess.run(["git", "-C", str(tmp_path), "init"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "baseline"],
+        check=True,
+        capture_output=True,
+    )
+    (tmp_path / "app/domain/order.py").write_text("\nimport app.infrastructure.database\n", encoding="utf-8")
+
+    assert check(tmp_path, "HEAD") == 0

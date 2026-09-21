@@ -298,3 +298,63 @@ def test_policy_enforces_architecture_and_diff_counts_new_and_resolved():
     resolved = SimpleNamespace(**common)
     resolved.architecture = base.architecture
     assert AuditDiff(current, resolved).resolved_architecture_violations == 1
+
+
+def test_existing_architecture_violations_do_not_block_legacy_diff():
+    complete = DimensionCompleteness(AnalysisStatus.COMPLETE, ())
+    score = SlopScore("test", 0.0, None, None, None, False)
+    common = dict(
+        inventory=SimpleNamespace(root="."),
+        score=score,
+        completeness=AuditCompleteness(complete, complete, complete),
+        complexity=SimpleNamespace(files=(), eroded_function_count=0),
+        duplication=SimpleNamespace(duplication_density=0.0),
+        imports=SimpleNamespace(cycles=()),
+        clone_groups=(),
+    )
+    config = ArchitectureConfig(
+        layers=(ArchitectureLayer("domain", ("app.domain.**",)), ArchitectureLayer("infra", ("app.infrastructure.**",))),
+        forbidden=(ArchitectureForbidden("domain", "infra"),),
+    )
+    edge = ImportEdge("app.domain.order", "app.infrastructure.database", 1, "runtime")
+    baseline = SimpleNamespace(**common, architecture=evaluate_architecture(inventory("app.domain.order", "app.infrastructure.database"), (edge,), config))
+    current = SimpleNamespace(**common, architecture=evaluate_architecture(inventory("app.domain.order", "app.infrastructure.database"), (edge,), config))
+
+    result = evaluate_diff(AuditDiff(baseline, current), PolicyConfig(max_new_architecture_violations=0))
+
+    assert result.passed
+
+
+def test_new_architecture_violation_blocks_legacy_diff():
+    complete = DimensionCompleteness(AnalysisStatus.COMPLETE, ())
+    score = SlopScore("test", 0.0, None, None, None, False)
+    common = dict(
+        inventory=SimpleNamespace(root="."),
+        score=score,
+        completeness=AuditCompleteness(complete, complete, complete),
+        complexity=SimpleNamespace(files=(), eroded_function_count=0),
+        duplication=SimpleNamespace(duplication_density=0.0),
+        imports=SimpleNamespace(cycles=()),
+        clone_groups=(),
+    )
+    baseline_config = ArchitectureConfig(
+        layers=(ArchitectureLayer("domain", ("app.domain.**",)), ArchitectureLayer("infra", ("app.infrastructure.**",))),
+        forbidden=(ArchitectureForbidden("domain", "infra"),),
+    )
+    current_config = ArchitectureConfig(
+        layers=(
+            ArchitectureLayer("domain", ("app.domain.**",)),
+            ArchitectureLayer("infra", ("app.infrastructure.**",)),
+            ArchitectureLayer("api", ("app.api.**",)),
+        ),
+        forbidden=(ArchitectureForbidden("domain", "infra"), ArchitectureForbidden("api", "infra")),
+    )
+    baseline_edge = ImportEdge("app.domain.order", "app.infrastructure.database", 1, "runtime")
+    new_edge = ImportEdge("app.api.http", "app.infrastructure.database", 2, "runtime")
+    baseline = SimpleNamespace(**common, architecture=evaluate_architecture(inventory("app.domain.order", "app.infrastructure.database"), (baseline_edge,), baseline_config))
+    current = SimpleNamespace(**common, architecture=evaluate_architecture(inventory("app.domain.order", "app.infrastructure.database", "app.api.http"), (baseline_edge, new_edge), current_config))
+
+    result = evaluate_diff(AuditDiff(baseline, current), PolicyConfig(max_new_architecture_violations=0))
+
+    assert not result.passed
+    assert "max-new-architecture-violations" in {item.rule for item in result.violations}

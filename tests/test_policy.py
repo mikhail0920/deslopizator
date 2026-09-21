@@ -32,9 +32,11 @@ def test_new_duplication_density_fails_budget():
 def test_resolved_clone_does_not_fail():
     assert evaluate_diff(AuditDiff(audit(clones=2), audit(clones=0)), PolicyConfig()).passed
 
-def test_partial_analysis_fails_by_default_and_can_be_allowed():
+def test_new_partial_analysis_fails_but_old_partial_analysis_is_baseline():
     diff = AuditDiff(audit(partial=True), audit(partial=True))
-    assert not evaluate_diff(diff, PolicyConfig()).passed
+    assert evaluate_diff(diff, PolicyConfig()).passed
+    complete = audit(partial=False)
+    assert not evaluate_diff(AuditDiff(complete, audit(partial=True)), PolicyConfig()).passed
     assert evaluate_diff(diff, PolicyConfig(allow_partial=True)).passed
 
 def test_max_score_is_standalone_policy():
